@@ -15,10 +15,10 @@ def make_message(data=None):
 
 def _sample_index():
     return {
-        "https://365tomorrows.com/older": {"title": "Older Story", "author": "Alice",
-                                            "pubdate": "Mon, 01 Jan 2024 00:00:00 +0000"},
-        "https://365tomorrows.com/newer": {"title": "Newer Story", "author": "Bob",
-                                            "pubdate": "Wed, 01 Jan 2025 00:00:00 +0000"},
+        "1": {"title": "Older Story", "author": "Alice",
+              "pubdate": "2024-01-01T00:00:00", "link": "https://365tomorrows.com/1/"},
+        "2": {"title": "Newer Story", "author": "Bob",
+              "pubdate": "2025-01-01T00:00:00", "link": "https://365tomorrows.com/2/"},
     }
 
 
@@ -27,7 +27,7 @@ def test_handle_search_matches_by_phrase(skill):
     skill.handle_search(make_message({"phrase": "older story"}))
     sent = skill.bus.emit.call_args[0][0]
     assert sent.msg_type == COMMON_READING_SEARCH_RESPONSE
-    assert sent.data["content_id"] == "https://365tomorrows.com/older"
+    assert sent.data["content_id"] == "1"
     assert sent.data["author"] == "Alice"
     assert sent.data["source"] == "365tomorrows.com"
     assert sent.data["machine_translated"] is False
@@ -37,7 +37,7 @@ def test_handle_search_surprise_me_picks_latest(skill):
     skill.index = _sample_index()
     skill.handle_search(make_message({"phrase": None, "collection_hint": "365 tomorrows"}))
     sent = skill.bus.emit.call_args[0][0]
-    assert sent.data["content_id"] == "https://365tomorrows.com/newer"
+    assert sent.data["content_id"] == "2"
 
 
 def test_handle_search_stays_silent_for_unmatched_collection(skill):
@@ -64,7 +64,7 @@ def test_handle_fetch_content_returns_paragraphs(skill):
     skill.index = _sample_index()
     skill.get_story_paragraphs = MagicMock(return_value=["Once upon a time.", "The end."])
 
-    skill.handle_fetch_content(make_message({"content_id": "https://365tomorrows.com/older"}))
+    skill.handle_fetch_content(make_message({"content_id": "1"}))
 
     sent = skill.bus.emit.call_args[0][0]
     assert sent.msg_type == COMMON_READING_FETCH_CONTENT_RESPONSE
@@ -90,7 +90,7 @@ def test_non_english_matches_against_translated_titles(skill, monkeypatch):
     skill.handle_search(make_message({"phrase": "ældre historie"}))
 
     sent = skill.bus.emit.call_args[0][0]
-    assert sent.data["content_id"] == "https://365tomorrows.com/older"
+    assert sent.data["content_id"] == "1"
     assert sent.data["machine_translated"] is True
 
 

@@ -1,8 +1,9 @@
 # <img src='book-512.png' card_color='#40DBB0' width='50' height='50' style='vertical-align:bottom'/> 365tomorrows Stories (provider)
 
 A *provider* skill for [ovos-common-reading-pipeline-plugin](https://github.com/andlo/ovos-common-reading-pipeline-plugin),
-reading daily flash science fiction from [365tomorrows.com](https://365tomorrows.com/)
-aloud.
+reading flash science fiction from [365tomorrows.com](https://365tomorrows.com/)
+aloud - the **full archive** (~7600 stories at time of writing), not
+just the latest few.
 
 A new short story (≤600 words) every day since 2005, licensed
 [CC BY-NC-ND 3.0](http://creativecommons.org/licenses/by-nc-nd/3.0/) -
@@ -26,12 +27,22 @@ pip install ovos-skill-365tomorrows-stories ovos-common-reading-pipeline-plugin
 
 ## Source
 
-Feeds from `https://365tomorrows.com/feed/` (RSS 2.0) for discovery
-(title/author/date), refreshed at most every 6 hours. The feed itself
-only carries a truncated excerpt, so the full story text is fetched
-live from the story's own page (`<div class="entry-content">`) once
-chosen - its first paragraph is always `Author: <name>`, which is
-extracted as metadata and excluded from what gets read aloud.
+Indexes the **full archive**, not just recent stories: paginates
+through WordPress's REST API (`wp-json/wp/v2/posts`, filtered to the
+"Story" category - excludes the site's separate "Voices of Tomorrow"
+audio posts and "Fragments"), ~7600 stories at time of writing across
+~76 pages of 100. Refreshed at most once every 24 hours (the archive is
+mostly static - only ~1 new story/day).
+
+Each listing page already includes full post content, so the index
+captures each story's author (parsed from its first paragraph, always
+`Author: <name>`) without a second request per story - only reading a
+specific chosen story needs one more request, to that story's own
+`wp-json/wp/v2/posts/<id>` endpoint.
+
+(An earlier version of this skill used the RSS feed instead, which only
+exposes the ~10 most recent stories - the REST API change was made
+specifically to reach the full archive.)
 
 ## Translation
 
@@ -65,7 +76,7 @@ provider.
 ## "Surprise me"
 
 A search with no specific `phrase` but a matching `collection_hint`
-returns the **most recent** story, by `pubDate`.
+returns the **most recent** story, by publish date.
 
 ## Credits
 

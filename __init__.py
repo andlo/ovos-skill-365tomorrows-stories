@@ -17,14 +17,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 ---
 
-Provider skill for ovos-common-reading-pipeline-plugin: reads daily
-flash science fiction from 365tomorrows.com aloud (content_type:
+Provider skill for ovos-common-reading-pipeline-plugin: reads flash
+science fiction from 365tomorrows.com aloud (content_type:
 "story"/"tale"). Content is licensed CC BY-NC-ND 3.0 - short (<=600
 words), general-audience flash fiction, updated daily since 2005.
 
-The RSS feed only carries an excerpt, not the full story, so the index
-is built from the feed (title/author/date/link) but the actual text is
-fetched live from each story's own page when chosen.
+Indexes the FULL archive (~7600 stories at time of writing, category
+"Story" only - excludes "Voices of Tomorrow" audio posts and
+"Fragments"), not just the latest handful - via WordPress's REST API
+(wp-json/wp/v2/posts), which is paginated and also returns full post
+content directly (no separate per-story HTML scrape needed, unlike the
+RSS feed which only carries a truncated excerpt).
 
 Like ovos-skill-ovosblog/ovos-skill-arxiv-papers - and unlike the
 Gutenberg-sourced providers (ovos-skill-andersen-tales,
@@ -44,18 +47,18 @@ from ovos_utils.process_utils import RuntimeRequirements
 
 import requests
 from bs4 import BeautifulSoup
-import xml.etree.ElementTree as ET
 import re
 import time
 import json
 
-FEED_URL = "https://365tomorrows.com/feed/"
-DC_CREATOR_TAG = "{http://purl.org/dc/elements/1.1/}creator"
+API_BASE = "https://365tomorrows.com/wp-json/wp/v2"
+STORY_CATEGORY_ID = 3  # confirmed via GET {API_BASE}/categories - "Story" (7593 posts at time of writing)
+POSTS_PER_PAGE = 100
 
 
 class StoryFetchError(Exception):
-    """Raised when the feed or a story page could not be fetched or
-    parsed."""
+    """Raised when the archive index or a story's text could not be
+    fetched or parsed."""
 
 
 COMMON_READING_SEARCH = "ovos.common_reading.search"
@@ -73,7 +76,10 @@ LICENSE_NOTICE = "Creative Commons Attribution-NonCommercial-NoDerivs 3.0"
 
 class TomorrowsStories(OVOSSkill):
 
-    INDEX_CACHE_TTL = 60 * 60 * 6  # 6h - new story roughly once a day
+    # the archive is large (~7600 stories) but mostly static - only ~1
+    # new story/day - so this is refreshed far less often than
+    # ovosblog/arxiv-papers's TTLs
+    INDEX_CACHE_TTL = 60 * 60 * 24  # 24h
 
     @classproperty
     def runtime_requirements(self):
@@ -87,8 +93,8 @@ class TomorrowsStories(OVOSSkill):
         )
 
     def initialize(self):
-        self.index = {}  # link -> {title, author, pubdate}
-        self._story_text_cache = {}  # link -> full story text (paragraphs)
+        self.index = {}  # post_id (str) -> {title, author, pubdate, link}
+        self._story_text_cache = {}  # post_id (str) -> full story text (paragraphs)
         self._translator = None
         self._translator_failed = False
         self._translated_titles_cache = {}
@@ -97,7 +103,7 @@ class TomorrowsStories(OVOSSkill):
         self.add_event(f"{COMMON_READING_FETCH_CONTENT}.{self.skill_id}", self.handle_fetch_content)
 
     def _index_cache_filename(self):
-        return "feed_index.json"
+        return "archive_index.json"
 
     def _read_index_cache(self):
         cache_file = self._index_cache_filename()
@@ -125,83 +131,112 @@ class TomorrowsStories(OVOSSkill):
             self._translated_titles_cache.clear()
             return
         try:
-            self.index = self.fetch_feed_index()
+            self.index = self.fetch_archive_index()
             self._write_index_cache()
             self._translated_titles_cache.clear()
         except StoryFetchError as e:
-            self.log.error(f"Could not refresh feed index: {e}")
+            self.log.error(f"Could not refresh archive index: {e}")
             if cached:
-                self.log.warning("Falling back to previously cached (possibly stale) feed index")
+                self.log.warning("Falling back to previously cached (possibly stale) archive index")
                 self.index = cached.get("index", {})
                 self._translated_titles_cache.clear()
 
-    def fetch_feed_index(self):
-        try:
-            r = requests.get(FEED_URL, timeout=10)
-            r.raise_for_status()
-        except requests.RequestException as e:
-            raise StoryFetchError(f"failed to fetch {FEED_URL}: {e}") from e
-        try:
-            root = ET.fromstring(r.content)
-        except ET.ParseError as e:
-            raise StoryFetchError(f"failed to parse feed XML: {e}") from e
-
-        channel = root.find("channel")
-        items = channel.findall("item") if channel is not None else []
-        index = {}
-        for item in items:
-            title = (item.findtext("title") or "").strip()
-            link = (item.findtext("link") or "").strip()
-            if not title or not link:
+    @staticmethod
+    def _extract_author_and_paragraphs(html):
+        """Shared by index-building (which needs just the author for
+        each entry) and fetch_content (which needs the paragraphs) -
+        both come from the same 'content.rendered' HTML the REST API
+        returns, whose first paragraph is always 'Author: <name>'."""
+        soup = BeautifulSoup(html, "html.parser")
+        paragraphs = []
+        author = ""
+        for p in soup.find_all("p"):
+            text = re.sub(r"\s+", " ", p.get_text(strip=True)).strip()
+            if not text:
                 continue
-            index[link] = {
-                "title": title,
-                "author": (item.findtext(DC_CREATOR_TAG) or "").strip(),
-                "pubdate": (item.findtext("pubDate") or "").strip(),
-            }
+            if text.lower().startswith("author:") and not author:
+                author = text.split(":", 1)[1].strip()
+                continue
+            paragraphs.append(text)
+        return author, paragraphs
+
+    def fetch_archive_index(self):
+        """Paginates through the FULL archive via WordPress's REST API
+        (category=Story only, excludes 'Voices of Tomorrow' audio posts
+        and 'Fragments') - not just the RSS feed's latest ~10 items.
+        Each page's response already includes full post content, so the
+        author (parsed from it) can be captured here without a second
+        request per story later."""
+        index = {}
+        page = 1
+        while True:
+            try:
+                r = requests.get(f"{API_BASE}/posts", params={
+                    "categories": STORY_CATEGORY_ID,
+                    "per_page": POSTS_PER_PAGE,
+                    "page": page,
+                }, timeout=15)
+            except requests.RequestException as e:
+                if index:
+                    break  # keep whatever pages succeeded so far
+                raise StoryFetchError(f"failed to fetch archive page {page}: {e}") from e
+            if r.status_code == 400:
+                break  # WordPress returns 400 once past the last page
+            try:
+                r.raise_for_status()
+                posts = r.json()
+            except (requests.RequestException, ValueError) as e:
+                if index:
+                    break
+                raise StoryFetchError(f"failed to fetch/parse archive page {page}: {e}") from e
+            if not posts:
+                break
+
+            for post in posts:
+                post_id = str(post["id"])
+                title = (post.get("title", {}).get("rendered") or "").strip()
+                if not title:
+                    continue
+                author, _ = self._extract_author_and_paragraphs(post.get("content", {}).get("rendered", ""))
+                index[post_id] = {
+                    "title": title,
+                    "author": author,
+                    "pubdate": post.get("date_gmt", ""),
+                    "link": post.get("link", ""),
+                }
+            page += 1
+
         if not index:
-            raise StoryFetchError("feed parsed but contained no usable items")
+            raise StoryFetchError("archive parsed but contained no usable stories")
         return index
 
-    def get_story_paragraphs(self, url):
-        """The RSS feed only carries an excerpt, so the full story is
-        fetched from its own page: <div class="entry-content"> holds
-        exactly the story's <p> tags, first of which is always
-        'Author: <name>' - the author metadata, not story text."""
-        if url in self._story_text_cache:
-            return self._story_text_cache[url]
+    def get_story_paragraphs(self, post_id):
+        if post_id in self._story_text_cache:
+            return self._story_text_cache[post_id]
         try:
-            r = requests.get(url, timeout=10)
+            r = requests.get(f"{API_BASE}/posts/{post_id}", timeout=10)
             r.raise_for_status()
-            r.encoding = "utf-8"
-            soup = BeautifulSoup(r.text, "html.parser")
-        except requests.RequestException as e:
-            raise StoryFetchError(f"failed to fetch {url}: {e}") from e
+            post = r.json()
+        except (requests.RequestException, ValueError) as e:
+            raise StoryFetchError(f"failed to fetch post {post_id}: {e}") from e
 
-        div = soup.find("div", {"class": "entry-content"})
-        if div is None:
-            raise StoryFetchError(f"story content not found at {url}")
-        paragraphs = []
-        for p in div.find_all("p"):
-            text = re.sub(r"\s+", " ", p.get_text(strip=True)).strip()
-            if text and not text.lower().startswith("author:"):
-                paragraphs.append(text)
+        _, paragraphs = self._extract_author_and_paragraphs(post.get("content", {}).get("rendered", ""))
         if not paragraphs:
-            raise StoryFetchError(f"no story text found at {url}")
-        self._story_text_cache[url] = paragraphs
+            raise StoryFetchError(f"no story text found for post {post_id}")
+        self._story_text_cache[post_id] = paragraphs
         return paragraphs
 
-    def _latest_link(self):
-        from email.utils import parsedate_to_datetime
-        best_link, best_date = None, None
-        for link, entry in self.index.items():
+    def _latest_post_id(self):
+        from datetime import datetime
+        best_id, best_date = None, None
+        for post_id, entry in self.index.items():
             try:
-                d = parsedate_to_datetime(entry["pubdate"])
+                d = datetime.fromisoformat(entry["pubdate"])
             except (TypeError, ValueError):
                 continue
             if best_date is None or d > best_date:
-                best_date, best_link = d, link
-        return best_link or (next(iter(self.index), None))
+                best_date, best_id = d, post_id
+        return best_id or (next(iter(self.index), None))
 
     def _get_translator(self):
         if self._translator is None and not self._translator_failed:
@@ -221,7 +256,7 @@ class TomorrowsStories(OVOSSkill):
         reasoning)."""
         target = lang.split("-")[0]
         if target == "en":
-            return {link: entry["title"] for link, entry in self.index.items()}
+            return {post_id: entry["title"] for post_id, entry in self.index.items()}
 
         cached = self._translated_titles_cache.get(target)
         if cached is not None:
@@ -233,8 +268,8 @@ class TomorrowsStories(OVOSSkill):
 
         translated = {}
         try:
-            for link, entry in self.index.items():
-                translated[link] = translator.translate(entry["title"], target=target, source="en")
+            for post_id, entry in self.index.items():
+                translated[post_id] = translator.translate(entry["title"], target=target, source="en")
         except Exception as e:
             self.log.warning(f"failed to translate titles to '{target}': {e}")
             return None
@@ -284,21 +319,21 @@ class TomorrowsStories(OVOSSkill):
         phrase = message.data.get("phrase")
         if phrase:
             title, confidence = match_one(phrase, list(titles.values()))
-            link = next(l for l, t in titles.items() if t == title)
+            post_id = next(pid for pid, t in titles.items() if t == title)
         elif collection_hint:
             # 'read me something from 365tomorrows' with no specific
             # title - the most recent story
-            link = self._latest_link()
-            title = titles[link]
+            post_id = self._latest_post_id()
+            title = titles[post_id]
             confidence = 1.0
         else:
             return
 
         self.bus.emit(message.reply(COMMON_READING_SEARCH_RESPONSE, {
             "skill_id": self.skill_id,
-            "content_id": link,
+            "content_id": post_id,
             "title": title,
-            "author": self.index[link].get("author") or "",
+            "author": self.index[post_id].get("author") or "",
             "collection": COLLECTION_NAME,
             "source": SOURCE_NAME,
             "confidence": confidence,

@@ -1,0 +1,13 @@
+{
+  "skill_id": "ovos-skill-365tomorrows-stories.andlo",
+  "source": "https://github.com/andlo/ovos-skill-365tomorrows-stories",
+  "package_name": "ovos-skill-365tomorrows-stories",
+  "pip_spec": "ovos-skill-365tomorrows-stories",
+  "license": "GPL-3.0-or-later",
+  "author": "andlo",
+  "name": "365tomorrows Historier (udbyder)",
+  "description": "Læser dagligt CC-licenseret science fiction fra 365tomorrows.com højt. Udbyder til ovos-common-reading-pipeline-plugin. Ingen selvstændig stemmegrænseflade.",
+  "examples": [],
+  "tags": ["entertainment", "scifi", "flashfiction", "provider"],
+  "icon": "https://raw.githubusercontent.com/andlo/ovos-skill-365tomorrows-stories/main/book-512.png"
+}

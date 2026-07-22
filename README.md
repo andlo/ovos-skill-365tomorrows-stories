@@ -64,8 +64,16 @@ English content the user didn't ask for.
 
 ## Collection hints
 
-Responds to `collection_hint` values like "365 tomorrows", "tomorrows",
-"three sixty five tomorrows".
+Responds to `collection_hint` values in the *device's own language* -
+e.g. "365 tomorrows"/"tomorrows" on English, "science fiction noveller"
+on Danish, "racconti di fantascienza" on Italian - matched fuzzily
+against that language's own alias list (see
+`locale/<lang>/collection.voc`). Like `ovos-skill-ovosblog`/
+`ovos-skill-arxiv-papers`, this provider works on *any* device language,
+so aliases fall back to English for any language we haven't bothered
+translating - see [ovos-common-reading-pipeline-plugin#26](https://github.com/andlo/ovos-common-reading-pipeline-plugin/issues/26).
+The collection name itself ("365tomorrows") stays untranslated - it's a
+proper noun.
 
 ## Content type
 

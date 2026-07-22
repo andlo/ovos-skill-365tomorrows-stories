@@ -1,0 +1,13 @@
+{
+  "skill_id": "ovos-skill-365tomorrows-stories.andlo",
+  "source": "https://github.com/andlo/ovos-skill-365tomorrows-stories",
+  "package_name": "ovos-skill-365tomorrows-stories",
+  "pip_spec": "ovos-skill-365tomorrows-stories",
+  "license": "GPL-3.0-or-later",
+  "author": "andlo",
+  "name": "Histórias 365tomorrows (fornecedor)",
+  "description": "Lê em voz alta ficção científica curta com licença CC da 365tomorrows.com diariamente. Fornecedor para ovos-common-reading-pipeline-plugin. Sem interface de voz autónoma.",
+  "examples": [],
+  "tags": ["entertainment", "scifi", "flashfiction", "provider"],
+  "icon": "https://raw.githubusercontent.com/andlo/ovos-skill-365tomorrows-stories/main/book-512.png"
+}

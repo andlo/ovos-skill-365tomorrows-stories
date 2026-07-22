@@ -68,7 +68,15 @@ COMMON_READING_FETCH_CONTENT_RESPONSE = "ovos.common_reading.fetch_content.respo
 COMMON_READING_PING = "ovos.common_reading.ping"
 COMMON_READING_PONG = "ovos.common_reading.pong"
 
-COLLECTION_ALIASES = ["365 tomorrows", "three sixty five tomorrows", "tomorrows"]
+# this provider translates and works on ANY device language (unlike
+# andersen-tales/grimm-tales's fixed SUPPORTED_LANGUAGES set) - so
+# collection_hint aliases are loaded per-language from
+# locale/<lang>/collection.voc where we've bothered to translate them
+# (the pipeline's own 8 supported languages), falling back to this
+# English list for anything else. COLLECTION_NAME stays an untranslated
+# proper noun ("365tomorrows") - only the ALIASES need localizing. See
+# ovos-common-reading-pipeline-plugin#26.
+FALLBACK_COLLECTION_ALIASES = ["365 tomorrows", "three sixty five tomorrows", "tomorrows"]
 CONTENT_TYPES = ["story", "tale"]
 COLLECTION_HINT_THRESHOLD = 0.85
 COLLECTION_NAME = "365tomorrows"
@@ -100,10 +108,20 @@ class TomorrowsStories(OVOSSkill):
         self._translator = None
         self._translator_failed = False
         self._translated_titles_cache = {}
+        self._load_collection_aliases()
         self.refresh_index()
         self.add_event(COMMON_READING_SEARCH, self.handle_search)
         self.add_event(f"{COMMON_READING_FETCH_CONTENT}.{self.skill_id}", self.handle_fetch_content)
         self.add_event(COMMON_READING_PING, self.handle_ping)
+
+    def _load_collection_aliases(self):
+        """Loads collection_hint aliases for the CURRENT device language
+        via OVOS's own resource file resolution (self.resources), falling
+        back to FALLBACK_COLLECTION_ALIASES (English) if this language
+        hasn't been translated. See ovos-common-reading-pipeline-plugin#26."""
+        aliases_raw = self.resources.load_vocabulary_file("collection")
+        aliases = [phrase for line in aliases_raw for phrase in line]
+        self._collection_aliases = aliases or FALLBACK_COLLECTION_ALIASES
 
     def _index_cache_filename(self):
         return "archive_index.json"
@@ -297,7 +315,7 @@ class TomorrowsStories(OVOSSkill):
     def _matches_collection_hint(self, hint):
         if not hint:
             return True
-        _, score = match_one(hint.lower(), COLLECTION_ALIASES)
+        _, score = match_one(hint.lower(), self._collection_aliases)
         return score >= COLLECTION_HINT_THRESHOLD
 
     def _matches_content_type(self, content_type):

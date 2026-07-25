@@ -8,8 +8,7 @@
   "name": "365tomorrows Historier (udbyder)",
   "description": "Læser dagligt CC-licenseret science fiction fra 365tomorrows.com højt. Udbyder til ovos-common-reading-pipeline-plugin. Ingen selvstændig stemmegrænseflade.",
   "examples": [
-    "Fortæl mig en historie fra 365tomorrows",
-    "Læs mig et eventyr fra tomorrows"
+    "Læs mig seneste historie fra 365tomorrows"
   ],
   "tags": [
     "entertainment",

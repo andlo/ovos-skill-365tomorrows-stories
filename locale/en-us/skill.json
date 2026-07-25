@@ -8,8 +8,8 @@
   "name": "365tomorrows Stories (provider)",
   "description": "Reads daily CC-licensed flash sci-fi from 365tomorrows.com aloud. Provider for ovos-common-reading-pipeline-plugin - no standalone voice interface.",
   "examples": [
-    "Tell me a story from 365tomorrows",
-    "Read me a story from tomorrows"
+    "Read newest story from 365tomorrows",
+    "Read a story from 365tomorrows"
   ],
   "tags": [
     "entertainment",

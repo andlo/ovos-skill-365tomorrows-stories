@@ -7,7 +7,15 @@
   "author": "andlo",
   "name": "365tomorrows Stories (provider)",
   "description": "Reads daily CC-licensed flash sci-fi from 365tomorrows.com aloud. Provider for ovos-common-reading-pipeline-plugin - no standalone voice interface.",
-  "examples": [],
-  "tags": ["entertainment", "scifi", "flashfiction", "provider"],
+  "examples": [
+    "Tell me a story from 365tomorrows",
+    "Read me a story from tomorrows"
+  ],
+  "tags": [
+    "entertainment",
+    "scifi",
+    "flashfiction",
+    "provider"
+  ],
   "icon": "https://raw.githubusercontent.com/andlo/ovos-skill-365tomorrows-stories/main/book-512.png"
 }

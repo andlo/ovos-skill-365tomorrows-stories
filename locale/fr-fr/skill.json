@@ -7,7 +7,15 @@
   "author": "andlo",
   "name": "Histoires 365tomorrows (fournisseur)",
   "description": "Lit à voix haute chaque jour de la science-fiction courte sous licence CC de 365tomorrows.com. Fournisseur pour ovos-common-reading-pipeline-plugin. Pas d'interface vocale autonome.",
-  "examples": [],
-  "tags": ["entertainment", "scifi", "flashfiction", "provider"],
+  "examples": [
+    "Raconte-moi une histoire de 365tomorrows",
+    "Lis-moi une histoire de tomorrows"
+  ],
+  "tags": [
+    "entertainment",
+    "scifi",
+    "flashfiction",
+    "provider"
+  ],
   "icon": "https://raw.githubusercontent.com/andlo/ovos-skill-365tomorrows-stories/main/book-512.png"
 }

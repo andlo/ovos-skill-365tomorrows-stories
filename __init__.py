@@ -52,6 +52,21 @@ import re
 import time
 import json
 
+
+def _user_agent():
+    """Say who is asking. Some sites answer python-requests' default
+    User-Agent with 403 (365tomorrows.com behind Cloudflare does), and a
+    descriptive one is what sites ask automated clients to send."""
+    try:
+        from importlib.metadata import version
+        ver = version("ovos-skill-365tomorrows-stories")
+    except Exception:
+        ver = "unknown"
+    return f"ovos-skill-365tomorrows-stories/{ver} (+https://github.com/andlo/ovos-skill-365tomorrows-stories)"
+
+
+HTTP_HEADERS = {"User-Agent": _user_agent()}
+
 API_BASE = "https://365tomorrows.com/wp-json/wp/v2"
 STORY_CATEGORY_ID = 3  # confirmed via GET {API_BASE}/categories - "Story" (7593 posts at time of writing)
 POSTS_PER_PAGE = 100
@@ -184,7 +199,10 @@ class TomorrowsStories(OVOSSkill):
         paragraphs = []
         author = ""
         for p in soup.find_all("p"):
-            text = re.sub(r"\s+", " ", p.get_text(strip=True)).strip()
+            # get_text() keeps the page's own spacing around inline tags;
+            # strip=True stripped each piece first and ran the words on
+            # either side of an <em> or <a> together
+            text = re.sub(r"\s+", " ", p.get_text()).strip()
             if not text:
                 continue
             if text.lower().startswith("author:") and not author:
@@ -208,7 +226,7 @@ class TomorrowsStories(OVOSSkill):
                     "categories": STORY_CATEGORY_ID,
                     "per_page": POSTS_PER_PAGE,
                     "page": page,
-                }, timeout=15)
+                }, timeout=15, headers=HTTP_HEADERS)
             except requests.RequestException as e:
                 if index:
                     break  # keep whatever pages succeeded so far
@@ -247,7 +265,7 @@ class TomorrowsStories(OVOSSkill):
         if post_id in self._story_text_cache:
             return self._story_text_cache[post_id]
         try:
-            r = requests.get(f"{API_BASE}/posts/{post_id}", timeout=10)
+            r = requests.get(f"{API_BASE}/posts/{post_id}", timeout=10, headers=HTTP_HEADERS)
             r.raise_for_status()
             post = r.json()
         except (requests.RequestException, ValueError) as e:

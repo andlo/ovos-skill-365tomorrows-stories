@@ -22,7 +22,7 @@ def make_post(post_id, title, content_html, date_gmt="2026-01-01T00:00:00"):
 def fake_pages_response(pages):
     """pages: list of lists of post dicts; page N (1-indexed) -> pages[N-1].
     Requesting beyond the list returns HTTP 400, like the real API."""
-    def fake_get(url, params=None, timeout=None):
+    def fake_get(url, params=None, timeout=None, headers=None):
         page = (params or {}).get("page", 1)
         if page > len(pages):
             return MagicMock(status_code=400)
@@ -51,7 +51,7 @@ def test_fetch_archive_index_paginates_until_400(skill, monkeypatch):
 def test_fetch_archive_index_captures_author_without_second_request(skill, monkeypatch):
     calls = []
 
-    def fake_get(url, params=None, timeout=None):
+    def fake_get(url, params=None, timeout=None, headers=None):
         calls.append(url)
         page = (params or {}).get("page", 1)
         if page > 1:
@@ -104,7 +104,7 @@ def test_get_story_paragraphs_excludes_author_line_and_fixes_linewrap(skill, mon
 def test_get_story_paragraphs_caches(skill, monkeypatch):
     calls = []
 
-    def fake_get(url, timeout=None):
+    def fake_get(url, timeout=None, headers=None):
         calls.append(url)
         resp = MagicMock(status_code=200)
         resp.raise_for_status = MagicMock()

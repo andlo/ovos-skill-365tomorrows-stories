@@ -205,7 +205,9 @@ class TomorrowsStories(OVOSSkill):
             text = re.sub(r"\s+", " ", p.get_text()).strip()
             if not text:
                 continue
-            if text.lower().startswith("author:") and not author:
+            # 'Author: Jane' - the page may put a space before the colon
+            # ('<strong>Author</strong> : Jane'), which get_text() keeps
+            if not author and re.match(r"author\s*:", text, re.IGNORECASE):
                 author = text.split(":", 1)[1].strip()
                 continue
             paragraphs.append(text)

@@ -30,3 +30,10 @@ def test_words_around_inline_tags_keep_their_spaces():
     author, paragraphs = TomorrowsStories._extract_author_and_paragraphs(html)
     assert author == "Jane"
     assert paragraphs == ["She never looked back, not once."]
+
+
+def test_author_line_with_a_space_before_the_colon_is_not_read():
+    html = "<p><strong>Author</strong> : Steve Smith, Staff Writer</p><p>It began.</p>"
+    author, paragraphs = TomorrowsStories._extract_author_and_paragraphs(html)
+    assert author == "Steve Smith, Staff Writer"
+    assert paragraphs == ["It began."]

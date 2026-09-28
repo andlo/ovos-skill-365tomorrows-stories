@@ -188,13 +188,27 @@ class TomorrowsStories(OVOSSkill):
             self.index = cached.get("index", {})
             self._translated_titles_cache.clear()
 
+    # 365tomorrows.com times out now and then (15 s read timeouts on a
+    # random page, seen live). With no cache yet, one failed attempt would
+    # leave the skill with nothing to offer until the next restart, so the
+    # background refresh tries a few more times before giving up.
+    REFRESH_ATTEMPTS = 4
+    REFRESH_RETRY_DELAY = 120  # seconds between attempts
+
     def _refresh_index_in_background(self):
-        try:
-            self.refresh_index()
-        except Exception as e:  # never let the thread die with a traceback
-            self.log.error(f"Background archive refresh failed: {e}")
-        else:
-            self.log.info(f"Archive index ready: {len(self.index)} stories")
+        for attempt in range(1, self.REFRESH_ATTEMPTS + 1):
+            try:
+                self.refresh_index()
+            except Exception as e:  # never let the thread die with a traceback
+                self.log.error(f"Background archive refresh failed: {e}")
+            if self.index:
+                self.log.info(f"Archive index ready: {len(self.index)} stories")
+                return
+            if attempt < self.REFRESH_ATTEMPTS:
+                self.log.warning(f"Archive index still empty - retrying in "
+                                 f"{self.REFRESH_RETRY_DELAY}s ({attempt}/{self.REFRESH_ATTEMPTS})")
+                time.sleep(self.REFRESH_RETRY_DELAY)
+        self.log.error("Archive index is empty - stories unavailable until the next restart")
 
     def refresh_index(self, force=False):
         cached = self._read_index_cache()

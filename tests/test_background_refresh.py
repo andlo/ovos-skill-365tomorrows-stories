@@ -7,6 +7,8 @@ import threading
 import time
 from unittest.mock import MagicMock
 
+from conftest import StoryFetchError as _StoryFetchError
+
 STALE = {"timestamp": 0, "index": {"1": {"title": "Old story", "author": "A", "pubdate": "", "link": ""}}}
 FRESH = {"2": {"title": "New story", "author": "B", "pubdate": "", "link": ""}}
 
@@ -72,3 +74,28 @@ def test_a_failing_fetch_keeps_the_cached_index_and_does_not_raise(skill, monkey
     skill._refresh_thread.join(5)
     assert skill.index == STALE["index"]
     skill.log.error.assert_called()
+
+
+def test_an_empty_index_is_retried_in_the_background(skill, monkeypatch):
+    monkeypatch.setattr(type(skill), "REFRESH_RETRY_DELAY", 0)
+    calls = []
+
+    def flaky():
+        calls.append(1)
+        if len(calls) < 3:
+            raise _StoryFetchError("Read timed out")
+        return dict(FRESH)
+
+    _init(skill, monkeypatch, flaky)
+    skill._refresh_thread.join(5)
+    assert len(calls) == 3
+    assert skill.index == FRESH
+
+
+def test_gives_up_after_the_configured_attempts(skill, monkeypatch):
+    monkeypatch.setattr(type(skill), "REFRESH_RETRY_DELAY", 0)
+    fetch = MagicMock(side_effect=_StoryFetchError("down"))
+    _init(skill, monkeypatch, fetch)
+    skill._refresh_thread.join(5)
+    assert fetch.call_count == type(skill).REFRESH_ATTEMPTS
+    assert skill.index == {}

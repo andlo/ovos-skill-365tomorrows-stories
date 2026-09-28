@@ -49,6 +49,7 @@ from ovos_utils.process_utils import RuntimeRequirements
 import requests
 from bs4 import BeautifulSoup
 import re
+import threading
 import time
 import json
 
@@ -136,7 +137,16 @@ class TomorrowsStories(OVOSSkill):
         self._translator_failed = False
         self._translated_titles_cache = {}
         self._load_collection_aliases()
-        self.refresh_index()
+        # Whatever is cached is usable at once, even if it is older than
+        # INDEX_CACHE_TTL. The full archive (77 pages of ~1.7 MB on a first
+        # run) is fetched in the background: done here in initialize(), it
+        # held up every other skill for ~5 minutes, because OVOS loads
+        # skills one at a time.
+        self._load_cached_index()
+        self._refresh_thread = threading.Thread(
+            target=self._refresh_index_in_background,
+            name=f"{self.skill_id}-index", daemon=True)
+        self._refresh_thread.start()
         self.add_event(COMMON_READING_SEARCH, self.handle_search)
         self.add_event(f"{COMMON_READING_FETCH_CONTENT}.{self.skill_id}", self.handle_fetch_content)
         self.add_event(COMMON_READING_PING, self.handle_ping)
@@ -171,6 +181,20 @@ class TomorrowsStories(OVOSSkill):
                 json.dump({"timestamp": time.time(), "index": self.index}, f)
         except OSError as e:
             self.log.warning(f"could not write index cache: {e}")
+
+    def _load_cached_index(self):
+        cached = self._read_index_cache()
+        if cached:
+            self.index = cached.get("index", {})
+            self._translated_titles_cache.clear()
+
+    def _refresh_index_in_background(self):
+        try:
+            self.refresh_index()
+        except Exception as e:  # never let the thread die with a traceback
+            self.log.error(f"Background archive refresh failed: {e}")
+        else:
+            self.log.info(f"Archive index ready: {len(self.index)} stories")
 
     def refresh_index(self, force=False):
         cached = self._read_index_cache()

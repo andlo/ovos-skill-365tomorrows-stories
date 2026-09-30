@@ -31,7 +31,7 @@ def test_initialize_returns_before_the_archive_is_fetched(skill, monkeypatch):
     _init(skill, monkeypatch, slow_fetch)
     assert time.monotonic() - start < 1.0
     # events are registered even though the fetch is still running
-    assert skill.add_event.call_count == 3
+    assert skill.add_event.call_count == 4  # search, fetch, ping, vocabulary.get
     release.set()
     skill._refresh_thread.join(5)
     assert skill.index == FRESH
